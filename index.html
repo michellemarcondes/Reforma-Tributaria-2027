@@ -59,13 +59,19 @@
       <div class="field"><label for="s-mes">Mês de referência</label><input id="s-mes" name="mes" type="month" value="2027-01" min="2027-01" max="2027-12"></div>
     </div>
 
-    <h3 class="sub">Faturamento do mês</h3>
+    <h3 class="sub">Faturamento do mês por tratamento tributário</h3>
+    <p class="hint-bloco">Separe o faturamento conforme a tributação de cada produto ou serviço vendido. <strong>Não sabe separar? Informe tudo em “Tributado integralmente”.</strong></p>
+    <p class="hint-bloco" id="s-sn-nota" hidden>No Simples Nacional padrão, as reduções de alíquota não diminuem o DAS (regra da calculadora oficial do Simples); apenas a faixa “Isento, imune, não tributado ou exportação” fica fora da CBS/IBS.</p>
+    <div class="faixas" id="s-fat" role="group" aria-label="Faturamento por tratamento tributário"></div>
+    <div class="fat-total"><span>Faturamento bruto do mês (soma das faixas)</span><strong id="s-bruto-total">R$ 0,00</strong></div>
+
+    <h3 class="sub">Deduções do faturamento</h3>
     <div class="grid g3">
-      <div class="field"><label class="req" for="s-bruto">Faturamento bruto (R$)</label><input id="s-bruto" name="receitaBruta" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Total das notas de venda e serviços do mês.</span></div>
       <div class="field"><label for="s-desc">Descontos e devoluções (R$)</label><input id="s-desc" name="descontos" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Descontos incondicionais e vendas devolvidas.</span></div>
       <div class="field only-reg"><label for="s-icms">ICMS destacado nas vendas (R$)</label><input id="s-icms" name="icms" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Em 2027 o ICMS (e o FCP) sai da base da CBS/IBS.</span></div>
       <div class="field only-reg"><label for="s-iss">ISS dos serviços (R$)</label><input id="s-iss" name="iss" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Em 2027 o ISS sai da base da CBS/IBS.</span></div>
     </div>
+    <p class="hint-bloco">As deduções são distribuídas entre as faixas na proporção do faturamento de cada uma.</p>
 
     <div class="only-sn" hidden>
       <h3 class="sub">Simples Nacional</h3>
@@ -78,8 +84,6 @@
     </div>
 
     <div class="only-reg">
-      <h3 class="sub">Composição do faturamento por tratamento tributário (%) <span class="nome" style="font-weight:400;color:var(--ink3)">— opcional; padrão: 100% tributação integral</span></h3>
-      <div class="grid g3" id="s-comp"></div>
       <h3 class="sub">Compras e despesas que geram crédito</h3>
       <div class="grid g3">
         <div class="field"><label for="s-cr">Compras de fornecedores do regime regular (R$)</label><input id="s-cr" name="comprasRegular" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Mercadorias, insumos, energia, aluguel e serviços de PJ — valor sem ICMS/ISS.</span></div>
@@ -208,6 +212,7 @@
       <li><strong>CBS a 11,3%</strong> (alíquota adotada pela Consulcamp para a simulação; editável acima). A alíquota oficial de 2027 será fixada por resolução do Senado.</li>
       <li><strong>IBS a 0,1%</strong> (0,05% estadual + 0,05% municipal), alíquotas de teste de 2027–2028.</li>
       <li>Base de cálculo 2027: ICMS, FCP e ISS deixam de compor a base da CBS/IBS; PIS e Cofins estão extintos; o Imposto Seletivo integra a base.</li>
+      <li>Simulador da empresa: o faturamento é informado por faixa de tributação (integral e reduções de 30%, 40%, 50%, 60%, 70%, 80% e 100%, além de isento/imune/exportação). Descontos, ICMS e ISS são distribuídos entre as faixas na proporção do faturamento de cada uma.</li>
       <li>Lucro Real e Lucro Presumido apuram CBS/IBS pelo regime regular (débito − crédito). O regime do IRPJ não altera o cálculo da CBS/IBS; o comparativo com PIS/Cofins de 2026 é apenas referência.</li>
       <li><strong>Simples Nacional padrão:</strong> CBS e IBS dentro do DAS. A alíquota efetiva vem das tabelas da LC 123/2006 (faixa pela RBT12); a parcela antes destinada a PIS/Cofins passa a CBS + IBS. A divisão CBS × IBS é estimada (IBS ≈ 1,1% dessa parcela, arredondado), reproduzindo as tabelas de 2027 divulgadas. Quando disponível, informe o pCBSSN/pIBSSN do PGDAS.</li>
       <li><strong>Simples optante pelo regime regular:</strong> o DAS deixa de incluir CBS/IBS, que passam a ser apurados como no regime regular, com créditos.</li>

@@ -285,61 +285,104 @@
     SN: { nome: 'Simples Nacional (IBS/CBS dentro do DAS)', grupo: 'simples' },
     SNH: { nome: 'Simples Nacional optante pelo regime regular de IBS/CBS', grupo: 'hibrido' }
   };
-  // reducoes de aliquota da LC 214/2025 usadas na composicao da receita
+  // faixas de faturamento por tratamento tributario (reducoes de aliquota da LC 214/2025)
+  // sn: a parcela entra na CBS/IBS do Simples? Na calculadora oficial do Simples a reducao de
+  // aliquota nao altera o DAS (ex.: cClassTrib 200003 paga pCBSSN cheio); so a receita isenta,
+  // imune, nao tributada ou de exportacao fica fora da CBS/IBS.
   var CATEGORIAS = [
-    { k: 'integral', nome: 'Tributação integral', red: 0 },
-    { k: 'red30', nome: 'Redução de 30% (profissões intelectuais)', red: 30 },
-    { k: 'red40', nome: 'Redução de 40% (bares, restaurantes, hotelaria, turismo)', red: 40 },
-    { k: 'red60', nome: 'Redução de 60% (saúde, educação, alimentos, higiene etc.)', red: 60 },
-    { k: 'zero', nome: 'Alíquota zero (cesta básica, hortifrúti, medicamentos etc.)', red: 100 },
-    { k: 'naoInc', nome: 'Exportação, imunidade, isenção ou suspensão', red: 100 }
+    { k: 'integral', nome: 'Tributado integralmente', paga: 100, red: 0, sn: true, ex: 'Regra geral: a maior parte dos produtos e serviços' },
+    { k: 'red30', nome: 'Redução de 30%', paga: 70, red: 30, sn: true, ex: 'Profissões intelectuais: contabilidade, advocacia, engenharia, arquitetura' },
+    { k: 'red40', nome: 'Redução de 40%', paga: 60, red: 40, sn: true, ex: 'Bares, restaurantes, hotelaria, parques e agências de turismo' },
+    { k: 'red50', nome: 'Redução de 50%', paga: 50, red: 50, sn: true, ex: 'Operações com bens imóveis' },
+    { k: 'red60', nome: 'Redução de 60%', paga: 40, red: 60, sn: true, ex: 'Saúde, educação, alimentos do Anexo VII, higiene e limpeza, insumos agropecuários, medicamentos' },
+    { k: 'red70', nome: 'Redução de 70%', paga: 30, red: 70, sn: true, ex: 'Locação, cessão onerosa e arrendamento de imóveis' },
+    { k: 'red80', nome: 'Redução de 80%', paga: 20, red: 80, sn: true, ex: 'Locação de imóveis em zonas reabilitadas' },
+    { k: 'zero', nome: 'Alíquota zero (redução de 100%)', paga: 0, red: 100, sn: true, ex: 'Cesta básica, hortifrúti e ovos, dispositivos médicos e de acessibilidade' },
+    { k: 'naoInc', nome: 'Isento, imune, não tributado ou exportação', paga: 0, red: 100, sn: false, ex: 'Exportações, livros, imunidades e demais operações sem CBS/IBS' }
   ];
+
+  // reparte um valor entre pesos (pro rata), com centavos que fecham exatamente o total
+  function ratear(total, pesos) {
+    var soma = 0n; pesos.forEach(function (w) { soma += w; });
+    var out = pesos.map(function () { return 0n; });
+    if (soma <= 0n || total === 0n) return out;
+    var acc = 0n, iMaior = 0;
+    pesos.forEach(function (w, i) {
+      out[i] = roundHE(div(mul(total, w), soma), 2); acc += out[i];
+      if (w > pesos[iMaior]) iMaior = i;
+    });
+    out[iMaior] += total - acc;
+    return out;
+  }
+
+  // faturamento por faixa: e.faturamento {k: R$} ou, por compatibilidade, receitaBruta + composicao {k: %}
+  function faturamentoPorCategoria(e) {
+    var fat = {}, bruto = 0n;
+    if (e.faturamento) {
+      CATEGORIAS.forEach(function (c) { fat[c.k] = D(e.faturamento[c.k]); if (fat[c.k] < 0n) fat[c.k] = 0n; bruto += fat[c.k]; });
+      return { fat: fat, bruto: bruto };
+    }
+    bruto = D(e.receitaBruta);
+    var comp = e.composicao || { integral: 100 }, alocado = 0n;
+    CATEGORIAS.forEach(function (c) { fat[c.k] = c.k === 'integral' ? 0n : roundHE(div(mul(bruto, D(comp[c.k] || 0)), CEM), 2); alocado += fat[c.k]; });
+    fat.integral = bruto - alocado; if (fat.integral < 0n) fat.integral = 0n;
+    return { fat: fat, bruto: bruto };
+  }
 
   /**
    * Simulacao mensal aproximada.
-   * e = { regime, receitaBruta, descontos, icms, iss, composicao:{k:%}, comprasRegular, comprasSimples,
-   *       aliqCreditoSimples, anexo, rbt12, premissas }
+   * e = { regime, faturamento:{integral, red30, red40, red50, red60, red70, red80, zero, naoInc} (R$)
+   *       [ou receitaBruta + composicao:{k:%}], descontos, icms, iss, comprasRegular, comprasSimples,
+   *       aliqCreditoSimples, anexo, rbt12, pCBSSN, pIBSSN, premissas }
+   * Descontos, ICMS e ISS sao rateados entre as faixas na proporcao do faturamento de cada uma.
    */
   function simularEmpresa(e) {
     var p = Object.assign({}, PREMISSAS_PADRAO, e.premissas || {});
     var reg = REGIMES[e.regime] || REGIMES.LP;
-    var bruto = D(e.receitaBruta), desc = D(e.descontos), icms = D(e.icms), iss = D(e.iss);
-    var res = { regime: e.regime, regimeNome: reg.nome, receitaBruta: bruto, deducoes: desc + icms + iss, avisos: [] };
+    var fp = faturamentoPorCategoria(e), bruto = fp.bruto;
+    var desc = D(e.descontos), icms = D(e.icms), iss = D(e.iss);
+    if (reg.grupo === 'simples') { icms = 0n; iss = 0n; } // no Simples padrao ICMS/ISS nao saem da base
+    var res = { regime: e.regime, regimeNome: reg.nome, receitaBruta: bruto, descontos: desc, icms: icms, iss: iss, deducoes: desc + icms + iss, avisos: [] };
     if (reg.grupo === 'simples' || reg.grupo === 'hibrido') {
       var s = simplesAliquotas(e.anexo || 'I', e.rbt12 || (toNum(bruto) * 12));
       if (e.pCBSSN !== undefined && e.pCBSSN !== '' && e.pCBSSN !== null) { s.pCBSSN = D(e.pCBSSN); s.pIBSSN = D(e.pIBSSN || 0); s.informadoPgdas = true; }
       res.simples = s;
     }
-    if (reg.grupo === 'simples') {
-      var base = bruto - desc; if (base < 0n) base = 0n; // no Simples ICMS/ISS nao sao excluidos
-      res.base = roundHE(base, 2);
-      var it = calcularItemSimples(base, res.simples.pCBSSN, res.simples.pIBSSN, null);
-      res.cbsDebito = it.vCBS; res.ibsDebito = it.vIBS;
-      res.cbsCredito = 0n; res.ibsCredito = 0n;
-      res.das = roundHE(div(mul(base, res.simples.aliquotaEfetiva), CEM), 2);
-      res.dasSemCbsIbs = res.das - it.vCBS - it.vIBS;
-      res.avisos.push('No Simples Nacional a CBS e o IBS são recolhidos dentro do DAS; não há apropriação de créditos.');
-    } else {
-      var b = bruto - desc - icms - iss; if (b < 0n) b = 0n;
-      res.base = roundHE(b, 2);
-      var comp = e.composicao || { integral: 100 };
-      var somaPct = 0;
-      CATEGORIAS.forEach(function (c) { somaPct += Number(comp[c.k] || 0); });
-      if (Math.abs(somaPct - 100) > 0.001) res.avisos.push('A composição da receita soma ' + somaPct.toFixed(2) + '% (deveria somar 100%). O restante foi tratado como tributação integral.');
-      var debCbs = 0n, debIbsUf = 0n, debIbsMun = 0n, alocado = 0n;
-      res.porCategoria = [];
-      CATEGORIAS.forEach(function (c, i) {
-        var pct = Number(comp[c.k] || 0);
-        if (!pct && c.k !== 'integral') return;
-        var parte = roundHE(div(mul(res.base, D(pct)), CEM), 2);
-        if (c.k === 'integral' && somaPct < 100) parte = roundHE(div(mul(res.base, D(pct + (100 - somaPct))), CEM), 2);
-        alocado += parte;
+    // rateio das deducoes por faixa
+    var pesos = CATEGORIAS.map(function (c) { return fp.fat[c.k]; });
+    var dedDesc = ratear(desc, pesos), dedIcms = ratear(icms, pesos), dedIss = ratear(iss, pesos);
+    res.porCategoria = [];
+    var debCbs = 0n, debIbs = 0n, baseTot = 0n;
+    CATEGORIAS.forEach(function (c, i) {
+      var f = fp.fat[c.k]; if (f <= 0n) return;
+      var ded = dedDesc[i] + dedIcms[i] + dedIss[i];
+      var base = f - ded; if (base < 0n) base = 0n;
+      base = roundHE(base, 2);
+      var linha = { k: c.k, nome: c.nome, paga: c.paga, red: c.red, faturamento: f, deducoes: ded, base: base };
+      if (reg.grupo === 'simples') {
+        if (c.sn) {
+          var it = calcularItemSimples(base, s.pCBSSN, s.pIBSSN, null);
+          linha.cbs = it.vCBS; linha.ibs = it.vIBS; linha.aliqCbs = s.pCBSSN; linha.aliqIbs = s.pIBSSN;
+        } else { linha.cbs = 0n; linha.ibs = 0n; linha.aliqCbs = 0n; linha.aliqIbs = 0n; }
+      } else {
         var cls = { c: '-', cst: '-', red: { cbs: c.red, ibsUf: c.red, ibsMun: c.red }, baseFator: 1, gIBSCBS: true };
-        var r = calcularItemRegular(parte, cls, p);
-        debCbs += r.tributos.cbs.devido; debIbsUf += r.tributos.ibsUf.devido; debIbsMun += r.tributos.ibsMun.devido;
-        res.porCategoria.push({ k: c.k, nome: c.nome, base: parte, cbs: r.tributos.cbs.devido, ibs: r.vIBS });
-      });
-      res.cbsDebito = debCbs; res.ibsDebito = debIbsUf + debIbsMun;
+        var r = calcularItemRegular(base, cls, p);
+        linha.cbs = r.tributos.cbs.devido; linha.ibs = r.vIBS;
+        linha.aliqCbs = r.tributos.cbs.aliquotaEfetiva; linha.aliqIbs = r.tributos.ibsUf.aliquotaEfetiva + r.tributos.ibsMun.aliquotaEfetiva;
+      }
+      debCbs += linha.cbs; debIbs += linha.ibs; baseTot += base;
+      res.porCategoria.push(linha);
+    });
+    res.base = baseTot;
+    res.cbsDebito = debCbs; res.ibsDebito = debIbs;
+    if (reg.grupo === 'simples') {
+      res.cbsCredito = 0n; res.ibsCredito = 0n;
+      var baseDas = bruto - desc; if (baseDas < 0n) baseDas = 0n;
+      var tudo = calcularItemSimples(baseDas, s.pCBSSN, s.pIBSSN, null);
+      res.dasSemCbsIbs = roundHE(div(mul(baseDas, s.aliquotaEfetiva), CEM), 2) - tudo.total;
+      res.das = res.dasSemCbsIbs + debCbs + debIbs;
+      res.avisos.push('No Simples Nacional a CBS e o IBS são recolhidos dentro do DAS, sem apropriação de créditos. Pela calculadora oficial do Simples, as reduções de alíquota da LC 214/2025 não alteram o valor do DAS; apenas a receita isenta, imune, não tributada ou de exportação fica fora da CBS/IBS.');
+    } else {
       // creditos: compras de fornecedores do regime regular (aliquota integral) e do Simples (valor destacado)
       var cr = calcularItemRegular(D(e.comprasRegular), null, p);
       var cs = D(e.comprasSimples);
@@ -347,11 +390,13 @@
       var crSn = roundHE(div(mul(cs, aliqSn), CEM), 2);
       var totAliq = D(p.cbs) + D(p.ibsUf) + D(p.ibsMun);
       var crSnCbs = totAliq > 0n ? roundHE(div(mul(crSn, D(p.cbs)), totAliq), 2) : 0n;
+      res.creditoRegular = cr.total; res.creditoSimples = crSn;
       res.cbsCredito = cr.tributos.cbs.devido + crSnCbs;
       res.ibsCredito = cr.vIBS + (crSn - crSnCbs);
       if (reg.grupo === 'hibrido') {
-        res.das = roundHE(div(mul(bruto - desc, res.simples.aliquotaEfetiva), CEM), 2);
-        var itH = calcularItemSimples(bruto - desc, res.simples.pCBSSN, res.simples.pIBSSN, null);
+        var bd = bruto - desc; if (bd < 0n) bd = 0n;
+        res.das = roundHE(div(mul(bd, res.simples.aliquotaEfetiva), CEM), 2);
+        var itH = calcularItemSimples(bd, res.simples.pCBSSN, res.simples.pIBSSN, null);
         res.dasSemCbsIbs = res.das - itH.total;
         res.avisos.push('Optante pelo regime regular de IBS/CBS: o DAS deixa de incluir a parcela de CBS/IBS, que passa a ser apurada fora do Simples, com direito a créditos.');
       }
@@ -380,7 +425,7 @@
     baseNFe: baseNFe, baseNFSe: baseNFSe, baseSimplesNFe: baseSimplesNFe,
     calcularItemRegular: calcularItemRegular, calcularItemSimples: calcularItemSimples,
     criarIndice: criarIndice, sujeitoIS: sujeitoIS, ncmNoAnexo: ncmNoAnexo, nbsNoAnexo: nbsNoAnexo, classificacoesPara: classificacoesPara,
-    simplesAliquotas: simplesAliquotas, simularEmpresa: simularEmpresa
+    simplesAliquotas: simplesAliquotas, simularEmpresa: simularEmpresa, ratear: ratear
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.RTC = API;

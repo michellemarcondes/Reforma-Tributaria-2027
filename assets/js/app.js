@@ -98,12 +98,28 @@
   }
 
   // ================================================================== 1. SIMULADOR
-  var CAT_HINT = { integral: 'Regra geral', red30: 'Ex.: contabilidade, advocacia, engenharia', red40: 'Ex.: restaurantes, hotéis', red60: 'Ex.: saúde, educação, alimentos do Anexo VII', zero: 'Ex.: cesta básica nacional', naoInc: 'Ex.: exportações' };
-  function montaComposicao() {
-    $('#s-comp').innerHTML = R.CATEGORIAS.map(function (c) {
-      return '<div class="field"><label for="s-c-' + c.k + '">' + esc(c.nome) + '</label><input id="s-c-' + c.k + '" data-cat="' + c.k + '" class="num" data-pct inputmode="decimal" placeholder="' + (c.k === 'integral' ? '100' : '0') + '"><span class="hint">' + esc(CAT_HINT[c.k]) + '</span></div>';
+  function montaFaixas() {
+    $('#s-fat').innerHTML = R.CATEGORIAS.map(function (c) {
+      var cls = c.paga === 100 ? '' : (c.paga === 0 ? ' z' : ' r');
+      var paga = c.k === 'naoInc' ? 'sem CBS/IBS' : (c.paga === 0 ? 'paga 0% da alíquota' : 'paga ' + c.paga + '% da alíquota');
+      return '<div class="faixa' + cls + '"><label for="s-f-' + c.k + '">' + esc(c.nome) + '<span class="paga">' + paga + '</span></label>' +
+        '<input id="s-f-' + c.k + '" data-faixa="' + c.k + '" class="num" inputmode="decimal" placeholder="0,00" aria-describedby="s-fx-' + c.k + '">' +
+        '<span class="ex" id="s-fx-' + c.k + '">' + esc(c.ex) + '</span></div>';
     }).join('');
+    $('#s-fat').addEventListener('input', totalFaixas);
   }
+  function lerFaixas() {
+    var out = {}, tot = 0n, erro = null;
+    $$('#s-fat input').forEach(function (i) {
+      var r = parseNum(i.value);
+      i.setAttribute('aria-invalid', String(!r.ok));
+      if (!r.ok && !erro) erro = i;
+      out[i.dataset.faixa] = r.ok && !r.vazio ? r.v : '0';
+      if (r.ok) tot += R.D(r.v);
+    });
+    return { fat: out, total: tot, erro: erro };
+  }
+  function totalFaixas() { var f = lerFaixas(); $('#s-bruto-total').textContent = brl(f.total); }
   function regimeHint(reg) {
     return {
       LP: 'Apura CBS/IBS pelo regime regular, com créditos sobre as compras.',
@@ -118,6 +134,7 @@
     var sn = reg === 'SN' || reg === 'SNH';
     $$('#f-sim .only-sn').forEach(function (e) { e.hidden = !sn; });
     $$('#f-sim .only-reg').forEach(function (e) { e.hidden = reg === 'SN'; });
+    $('#s-sn-nota').hidden = reg !== 'SN';
     $('#s-pcbs').closest('.field').hidden = reg !== 'SN';
     $('#s-pibs').closest('.field').hidden = reg !== 'SN';
   }
@@ -140,17 +157,16 @@
     var f = $('#f-sim'), msg = $('#s-msg'); msg.textContent = '';
     var nome = $('#s-nome').value.trim();
     if (!nome) { msg.textContent = 'Informe o nome da empresa.'; $('#s-nome').focus(); return; }
-    var v = lerCampos(f, ['receitaBruta', 'descontos', 'icms', 'iss', 'rbt12', 'pCBSSN', 'pIBSSN', 'comprasRegular', 'comprasSimples', 'aliqCreditoSimples'], msg);
+    var v = lerCampos(f, ['descontos', 'icms', 'iss', 'rbt12', 'pCBSSN', 'pIBSSN', 'comprasRegular', 'comprasSimples', 'aliqCreditoSimples'], msg);
     if (!v) return;
-    if (!(Number(v.receitaBruta) > 0)) { msg.textContent = 'Informe o faturamento bruto do mês.'; $('#s-bruto').focus(); return; }
-    var comp = {}, informouComp = false;
-    $$('#s-comp input').forEach(function (i) { var r = parseNum(i.value, true); if (!r.vazio && r.ok) { comp[i.dataset.cat] = Number(r.v); informouComp = true; } });
-    if (!informouComp) comp = { integral: 100 };
+    var fx = lerFaixas();
+    if (fx.erro) { msg.textContent = 'Valor inválido em "' + fx.erro.closest('.faixa').querySelector('label').firstChild.textContent + '". Use números, ex.: 12.345,67'; fx.erro.focus(); return; }
+    if (!(fx.total > 0n)) { msg.textContent = 'Informe o faturamento do mês em pelo menos uma faixa (se não souber separar, use “Tributado integralmente”).'; $('#s-f-integral').focus(); return; }
     var reg = $('#s-regime').value;
     var e = {
-      regime: reg, receitaBruta: v.receitaBruta, descontos: v.descontos,
+      regime: reg, faturamento: fx.fat, descontos: v.descontos,
       icms: reg === 'SN' ? 0 : v.icms, iss: reg === 'SN' ? 0 : v.iss,
-      composicao: comp, comprasRegular: v.comprasRegular, comprasSimples: v.comprasSimples, aliqCreditoSimples: v.aliqCreditoSimples,
+      comprasRegular: v.comprasRegular, comprasSimples: v.comprasSimples, aliqCreditoSimples: v.aliqCreditoSimples,
       anexo: $('#s-anexo').value, rbt12: v.rbt12 || '', premissas: premissas()
     };
     if (reg === 'SN' && v.pCBSSN !== '') { e.pCBSSN = v.pCBSSN; e.pIBSSN = v.pIBSSN || '0'; }
@@ -181,32 +197,39 @@
     h += '</div>';
     if (r.saldoCredor > 0n) h += '<div class="box ok"><h2><span class="ic">✅</span>Saldo credor</h2><p>Os créditos superam os débitos em <strong>' + brl(r.saldoCredor) + '</strong>. O saldo pode ser compensado nos períodos seguintes ou objeto de pedido de ressarcimento, nos termos da LC 214/2025.</p></div>';
 
+    // quadro por faixa de tributacao
+    var sn2 = r.regime === 'SN';
+    h += '<h3 class="sub">Cálculo por faixa de tributação</h3><div class="tbl-wrap"><table><thead><tr><th>Faixa</th><th class="v">Faturamento</th><th class="v">(−) Deduções</th><th class="v">Base de cálculo</th><th class="v">Alíq. efetiva CBS</th><th class="v">CBS</th><th class="v">IBS</th></tr></thead><tbody>';
+    var tf = 0n, td = 0n;
+    r.porCategoria.forEach(function (c) {
+      tf += c.faturamento; td += c.deducoes;
+      h += '<tr><td>' + esc(c.nome) + (sn2 ? '' : ' <span class="bdg' + (c.paga < 100 ? ' g' : '') + '">' + (c.k === 'naoInc' ? 'sem CBS/IBS' : 'paga ' + c.paga + '%') + '</span>') + '</td><td class="v">' + brl(c.faturamento) + '</td><td class="v">' + brl(c.deducoes) + '</td><td class="v">' + brl(c.base) + '</td><td class="v">' + pct(c.aliqCbs, 4) + '</td><td class="v">' + brl(c.cbs) + '</td><td class="v">' + brl(c.ibs) + '</td></tr>';
+    });
+    h += '<tr class="tot"><td>Total</td><td class="v">' + brl(tf) + '</td><td class="v">' + brl(td) + '</td><td class="v">' + brl(r.base) + '</td><td></td><td class="v">' + brl(r.cbsDebito) + '</td><td class="v">' + brl(r.ibsDebito) + '</td></tr></tbody></table></div>';
+
     h += '<h3 class="sub">Memória de cálculo</h3><div class="tbl-wrap"><table class="mem"><tbody>';
-    h += linha('Faturamento bruto', brl(r.receitaBruta));
+    h += linha('Faturamento bruto (soma das faixas)', brl(r.receitaBruta));
     if (sn) {
-      h += linha('(−) Descontos e devoluções', brl(R.D(e.descontos)));
-      h += linha('= Receita do Simples sujeita ao DAS', brl(r.base), 'sub');
+      h += linha('(−) Descontos e devoluções', brl(r.descontos));
       var s = r.simples;
       h += linha(esc(s.anexoNome) + ' — ' + s.faixa + 'ª faixa (RBT12 ' + brl(s.rbt12) + ')', 'nominal ' + pct(s.aliquotaNominal, 2) + ' · dedução ' + brl(s.parcelaDeduzir));
       h += linha('Alíquota efetiva do DAS', pct(s.aliquotaEfetiva, 4));
       if (s.informadoPgdas) h += linha('Alíquotas de CBS/IBS informadas do PGDAS', 'pCBSSN ' + pct(s.pCBSSN, 4) + ' · pIBSSN ' + pct(s.pIBSSN, 4));
       else h += linha('Partilha 2027 do anexo: CBS ' + pct(s.repCBS, 2) + ' · IBS ' + pct(s.repIBS, 2) + (s.tetoIssAplicado ? ' (sobre o excedente; ISS limitado a 5%)' : ''), 'pCBSSN ' + pct(s.pCBSSN, 4) + ' · pIBSSN ' + pct(s.pIBSSN, 4));
-      h += linha('CBS = receita × pCBSSN', brl(r.cbsDebito));
-      h += linha('IBS = receita × pIBSSN', brl(r.ibsDebito));
+      h += linha('CBS dentro do DAS', brl(r.cbsDebito));
+      h += linha('IBS dentro do DAS', brl(r.ibsDebito));
       h += linha('Demais tributos do DAS (IRPJ, CSLL, CPP, ICMS/ISS…)', brl(r.dasSemCbsIbs));
       h += linha('= DAS total estimado', brl(r.das), 'tot');
       if (s.excedeLimite) h += '</tbody></table></div><div class="box alert"><h2>Atenção</h2><p>RBT12 acima de R$ 4,8 milhões: a empresa excede o limite do Simples Nacional.</p></div><div class="tbl-wrap"><table class="mem"><tbody>';
     } else {
-      h += linha('(−) Descontos e devoluções', brl(R.D(e.descontos)));
-      h += linha('(−) ICMS/FCP destacados', brl(R.D(e.icms)));
-      h += linha('(−) ISS', brl(R.D(e.iss)));
+      h += linha('(−) Descontos e devoluções', brl(r.descontos));
+      h += linha('(−) ICMS/FCP destacados', brl(r.icms));
+      h += linha('(−) ISS', brl(r.iss));
       h += linha('= Receita líquida (base de cálculo da CBS/IBS)', brl(r.base), 'sub');
-      r.porCategoria.forEach(function (c) {
-        h += linha('Débitos — ' + esc(c.nome) + ' · base ' + brl(c.base), 'CBS ' + brl(c.cbs) + ' · IBS ' + brl(c.ibs));
-      });
+      h += linha('Débitos de CBS + IBS (quadro acima)', 'CBS ' + brl(r.cbsDebito) + ' · IBS ' + brl(r.ibsDebito));
       h += linha('Total de débitos (CBS + IBS)', brl(r.cbsDebito + r.ibsDebito), 'sub');
-      h += linha('(−) Créditos sobre compras do regime regular (' + brl(R.D(e.comprasRegular)) + ')', brl(R.calcularItemRegular(e.comprasRegular || 0, null, p).total), 'neg');
-      if (Number(e.comprasSimples) > 0) h += linha('(−) Créditos sobre compras do Simples (' + brl(R.D(e.comprasSimples)) + ' × ' + pct(R.D(e.aliqCreditoSimples || 0), 2) + ')', brl(r.cbsCredito + r.ibsCredito - R.calcularItemRegular(e.comprasRegular || 0, null, p).total), 'neg');
+      h += linha('(−) Créditos sobre compras do regime regular (' + brl(R.D(e.comprasRegular)) + ')', brl(r.creditoRegular), 'neg');
+      if (r.creditoSimples > 0n) h += linha('(−) Créditos sobre compras do Simples (' + brl(R.D(e.comprasSimples)) + ' × ' + pct(R.D(e.aliqCreditoSimples || 0), 2) + ')', brl(r.creditoSimples), 'neg');
       h += linha('CBS a recolher', brl(r.cbsRecolher));
       h += linha('IBS a recolher', brl(r.ibsRecolher));
       h += linha('= Total CBS + IBS', brl(r.totalRecolher), 'tot');
@@ -657,10 +680,10 @@
       $('#meta-base2').textContent = 'versão ' + d.meta.versaoBase + ', de ' + dt + ', vigência em ' + d.meta.dataReferencia.split('-').reverse().join('/');
       atualizaMeta();
       opcoesAnexo($('#s-anexo')); opcoesAnexo($('#n-anexo'));
-      montaComposicao();
+      montaFaixas();
       $('#s-regime').addEventListener('change', toggleSim); toggleSim();
       $('#f-sim').addEventListener('submit', simular);
-      $('#f-sim').addEventListener('reset', function () { setTimeout(function () { toggleSim(); $('#s-res').hidden = true; $('#s-msg').textContent = ''; }, 0); });
+      $('#f-sim').addEventListener('reset', function () { setTimeout(function () { toggleSim(); totalFaixas(); $('#s-res').hidden = true; $('#s-msg').textContent = ''; }, 0); });
       linhas = store.get('rtc-painel', []) || [];
       eventosPainel(); renderPainel();
       eventosNota(); toggleNota();

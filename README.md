@@ -12,9 +12,11 @@ Site estático (HTML/CSS/JS, sem servidor) para simular a **CBS** e o **IBS** de
 ## Funcionalidades
 
 1. **Simulador da empresa** — nome da empresa (sem CNPJ), regime (Lucro Real, Lucro Presumido,
-   Simples Nacional padrão ou Simples optante pelo regime regular de IBS/CBS), faturamento bruto,
-   deduções (descontos, ICMS, ISS), composição da receita por tratamento tributário e compras com
-   crédito. Mostra a receita líquida (base), débitos, créditos, CBS e IBS a recolher, carga efetiva
+   Simples Nacional padrão ou Simples optante pelo regime regular de IBS/CBS), **faturamento por
+   faixa de tributação** (integral; reduções de 30%, 40%, 50%, 60%, 70%, 80%; alíquota zero;
+   isento/imune/exportação), com o faturamento bruto somado automaticamente, deduções (descontos,
+   ICMS, ISS — rateadas entre as faixas) e compras com crédito. No Simples padrão, seguindo a
+   calculadora oficial, as reduções não alteram o DAS; só a faixa isenta/exportação fica fora. Mostra a receita líquida (base), débitos, créditos, CBS e IBS a recolher, carga efetiva
    e comparativo com o PIS/Cofins de 2026.
 2. **Painel do contador** — vários clientes de uma vez (digitação ou importação de CSV),
    recálculo instantâneo, totais da carteira, exportação do resultado em CSV e impressão/PDF.

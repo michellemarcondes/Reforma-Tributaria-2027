@@ -104,6 +104,21 @@ table.mem td:first-child{width:62%}
 .bdg{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:2px;margin-right:6px;letter-spacing:.06em;text-transform:uppercase;vertical-align:1px;background:#E6F0F8;color:#0F5B8E}
 .bdg.g{background:#DFF2EA;color:var(--green-dk)}
 
+/* faixas de faturamento do simulador */
+.hint-bloco{font-size:12.5px;color:var(--ink3);margin:0 0 10px}
+.faixas{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:8px 14px}
+.faixa{display:grid;grid-template-columns:1fr 170px;gap:4px 12px;align-items:center;border:1px solid #E6E9ED;border-left:4px solid var(--navy);border-radius:2px;padding:9px 12px;background:#fff}
+.faixa.r{border-left-color:var(--blue-md)}.faixa.z{border-left-color:var(--green)}
+.faixa label{font-size:13px;font-weight:700;color:var(--navy);letter-spacing:0;text-transform:none}
+.faixa .paga{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--navy);padding:2px 6px;border-radius:2px;vertical-align:1px}
+.faixa.r .paga{background:var(--blue-md)}.faixa.z .paga{background:var(--green)}
+.faixa .ex{grid-column:1/2;font-size:11.5px;color:var(--ink3);line-height:1.35}
+.faixa input{grid-column:2/3;grid-row:1/3;width:100%;padding:8px 11px;border:1px solid var(--gray-ln);border-radius:2px;font-size:14px;font-family:inherit;color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums}
+.faixa input:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue)}
+.fat-total{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 4px;padding:11px 14px;background:#E8EDF5;border-top:2px solid var(--navy);border-radius:2px;color:var(--navy)}
+.fat-total strong{font-size:19px;font-variant-numeric:tabular-nums}
+@media(max-width:640px){.faixa{grid-template-columns:1fr}.faixa input{grid-column:1/-1;grid-row:auto}.faixas{grid-template-columns:1fr}}
+
 /* busca NCM/NBS */
 .search{position:relative}
 .sugg{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--blue);border-top:none;max-height:320px;overflow:auto;box-shadow:0 6px 18px rgba(7,29,73,.15)}
