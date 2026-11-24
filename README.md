@@ -1,5 +1,7 @@
 # Calculadora CBS e IBS 2027 — Consulcamp
 
+**Acesse o site:** https://michellemarcondes.github.io/Reforma-Tributaria-2027/
+
 Site estático (HTML/CSS/JS, sem servidor) para simular a **CBS** e o **IBS** de 2027
 (Reforma Tributária do Consumo — LC 214/2025), com o motor de cálculo e as tabelas oficiais da
 **Calculadora RTC da Receita Federal**:
