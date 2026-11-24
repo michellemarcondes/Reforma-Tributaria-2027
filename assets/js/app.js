@@ -13,13 +13,36 @@
   };
 
   // ------------------------------------------------------------------ numeros
-  function parseNum(s) {
+  // Aceita "2000", "2.000", "2.000,00", "2000,5", "2,000.50", "1234.56" e "R$ 1.234,56".
+  // Ponto unico seguido de exatamente 3 digitos (ex.: 18.000) e separador de milhar, exceto em
+  // campos de percentual (pct=true) ou quando a parte inteira e 0 (ex.: 0.125).
+  function parseNum(s, pct) {
     s = String(s == null ? '' : s).trim().replace(/\s|R\$|%/g, '');
     if (!s) return { ok: true, v: '0', vazio: true };
-    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-    else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
+    var temV = s.indexOf(',') >= 0, temP = s.indexOf('.') >= 0;
+    if (temV && temP) {
+      if (s.lastIndexOf('.') > s.lastIndexOf(',')) s = s.replace(/,/g, '');      // 2,000.50
+      else s = s.replace(/\./g, '').replace(',', '.');                            // 2.000,50
+    } else if (temV) {
+      if (s.split(',').length > 2) s = s.replace(/,/g, '');                       // 1,000,000
+      else s = s.replace(',', '.');                                               // 2000,50
+    } else if (temP) {
+      var pp = s.split('.');
+      if (pp.length > 2) s = s.replace(/\./g, '');                                // 1.000.000
+      else if (!pct && pp[1].length === 3 && /^-?[1-9]\d{0,2}$/.test(pp[0])) s = pp[0] + pp[1]; // 18.000
+    }
     if (!/^-?\d+(\.\d+)?$/.test(s)) return { ok: false, v: '0' };
     return { ok: true, v: s, vazio: false };
+  }
+  function ehPct(el) { return !!(el && el.hasAttribute && el.hasAttribute('data-pct')); }
+  // ao sair do campo, mostra o numero interpretado no formato brasileiro (ex.: 2.000 -> 2.000,00)
+  function formatarCampo(el) {
+    var r = parseNum(el.value, ehPct(el));
+    if (!r.ok || r.vazio) return;
+    var n = Number(r.v);
+    var txt = ehPct(el) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+      : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (txt !== el.value) { el.value = txt; el.dispatchEvent(new Event('input', { bubbles: true })); }
   }
   var nfBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   function brl(v) { return nfBRL.format(Number(R.toStr(typeof v === 'bigint' ? v : R.D(v), 2))); }
@@ -78,7 +101,7 @@
   var CAT_HINT = { integral: 'Regra geral', red30: 'Ex.: contabilidade, advocacia, engenharia', red40: 'Ex.: restaurantes, hotéis', red60: 'Ex.: saúde, educação, alimentos do Anexo VII', zero: 'Ex.: cesta básica nacional', naoInc: 'Ex.: exportações' };
   function montaComposicao() {
     $('#s-comp').innerHTML = R.CATEGORIAS.map(function (c) {
-      return '<div class="field"><label for="s-c-' + c.k + '">' + esc(c.nome) + '</label><input id="s-c-' + c.k + '" data-cat="' + c.k + '" class="num" inputmode="decimal" placeholder="' + (c.k === 'integral' ? '100' : '0') + '"><span class="hint">' + esc(CAT_HINT[c.k]) + '</span></div>';
+      return '<div class="field"><label for="s-c-' + c.k + '">' + esc(c.nome) + '</label><input id="s-c-' + c.k + '" data-cat="' + c.k + '" class="num" data-pct inputmode="decimal" placeholder="' + (c.k === 'integral' ? '100' : '0') + '"><span class="hint">' + esc(CAT_HINT[c.k]) + '</span></div>';
     }).join('');
   }
   function regimeHint(reg) {
@@ -103,7 +126,7 @@
     var out = {}, erro = null;
     nomes.forEach(function (n) {
       var el = form.querySelector('[name="' + n + '"]');
-      var r = parseNum(el.value);
+      var r = parseNum(el.value, ehPct(el));
       el.setAttribute('aria-invalid', String(!r.ok));
       if (!r.ok && !erro) erro = el;
       out[n] = r.vazio ? '' : r.v;
@@ -121,7 +144,7 @@
     if (!v) return;
     if (!(Number(v.receitaBruta) > 0)) { msg.textContent = 'Informe o faturamento bruto do mês.'; $('#s-bruto').focus(); return; }
     var comp = {}, informouComp = false;
-    $$('#s-comp input').forEach(function (i) { var r = parseNum(i.value); if (!r.vazio && r.ok) { comp[i.dataset.cat] = Number(r.v); informouComp = true; } });
+    $$('#s-comp input').forEach(function (i) { var r = parseNum(i.value, true); if (!r.vazio && r.ok) { comp[i.dataset.cat] = Number(r.v); informouComp = true; } });
     if (!informouComp) comp = { integral: 100 };
     var reg = $('#s-regime').value;
     var e = {
@@ -404,7 +427,7 @@
     $('#n-cod').placeholder = tipo === 'ncm' ? 'Digite o código ou a descrição (ex.: 10063021 ou arroz)' : 'Digite a NBS, a descrição (ex.: contabilidade) ou o item da LC 116 (ex.: 17.19)';
     $('#n-cod-hint').textContent = tipo === 'ncm' ? 'Use os 8 dígitos do NCM ou busque pela descrição.' : 'A NFS-e usa a NBS (9 dígitos), não o CNAE. Busque pela descrição do serviço ou pelo item da LC 116.';
   }
-  function limparCodigo() { codSel = null; $('#n-path').innerHTML = ''; $('#n-class').innerHTML = '<option value="">Informe o NCM/NBS para listar as classificações aplicáveis</option>'; $('#n-class-hint').textContent = ''; $('#n-is-f').hidden = true; }
+  function limparCodigo() { codSel = null; enqAtual = null; $('#n-enq').hidden = true; $('#n-path').innerHTML = ''; $('#n-class').innerHTML = '<option value="">Informe o NCM/NBS para listar as classificações aplicáveis</option>'; $('#n-class-hint').textContent = ''; $('#n-is-f').hidden = true; }
 
   function escolherCodigo(c) {
     var tipo = $('#n-tipo').value;
@@ -412,24 +435,59 @@
     $('#n-cod').value = (tipo === 'ncm' ? fmtNcm(c) : fmtNbs(c)) + ' — ' + descFolha(tipo, c);
     $('#n-sugg').hidden = true;
     $('#n-path').innerHTML = caminho(tipo, c).map(function (x) { return '<b>' + esc(tipo === 'ncm' ? fmtNcm(x[0]) : x[0]) + '</b> ' + esc(x[1]); }).join('<br>');
+    var enq = enquadrar(tipo, c);
+    var opt = function (x) { return '<option value="' + x.c + '">' + x.cst + ' / ' + x.c + ' — ' + esc(x.d.length > 110 ? x.d.slice(0, 107) + '…' : x.d) + rotRed(x) + '</option>'; };
+    var h = '<optgroup label="Regra geral">' + opt(enq.integral) + '</optgroup>';
+    if (enq.especificas.length) h += '<optgroup label="Tratamentos da LC 214/2025 vinculados a este código">' + enq.especificas.map(opt).join('') + '</optgroup>';
+    h += '<optgroup label="Outras situações (confirme o enquadramento)">' + enq.outras.map(opt).join('') + '</optgroup>';
+    $('#n-class').innerHTML = h;
+    $('#n-class').value = enq.escolhida.c;
+    var hint = enq.especificas.length > 1 ? 'Este código também consta de: ' + enq.especificas.filter(function (x) { return x !== enq.escolhida; }).map(function (x) { return x.c + rotRed(x); }).join('; ') + '. Troque a classificação se a operação se enquadrar em outra hipótese.' : '';
+    if (enq.lc.length) hint += (hint ? ' ' : '') + 'Item(ns) da LC 116 correlacionado(s): ' + enq.lc.join(', ') + '.';
+    $('#n-class-hint').textContent = hint;
+    mostrarEnquadramento(enq);
+    $('#n-is-f').hidden = !(tipo === 'ncm' && R.sujeitoIS(IDX, c));
+  }
+  // Beneficios que dependem de condicao do adquirente ou da operacao nao sao aplicados automaticamente.
+  var CONDICIONAL = /administra[cç][aã]o p[uú]blica|[oó]rg[aã]os|entidades de sa[uú]de imunes|emerg[eê]ncia|soberania|diferimento|produtor rural|Programa Universidade|Institui[cç][aã]o Cient[ií]fica|cooperativ|zonas reabilitadas|reabilita[cç][aã]o urbana|projetos incentivados|Zona Franca|livre com[eé]rcio/i;
+  function reducaoMedia(x) { var r = x.red || {}; return (Number(r.cbs || 0) + Number(r.ibsUf || 0) + Number(r.ibsMun || 0)) / 3; }
+  function enquadrar(tipo, c) {
     var ap = R.classificacoesPara(IDX, tipo, c);
     var sug = tipo === 'nbs' && DATA.nbsSug[c] ? DATA.nbsSug[c] : null;
     var esp = ap.especificas.slice();
-    if (sug) sug.c.forEach(function (cc) { var o = IDX.porCodigo[cc]; if (o && esp.indexOf(o) < 0 && cc !== '000001' && ap.gerais.indexOf(o) >= 0) esp.push(o); });
+    if (sug) sug.c.forEach(function (cc) { var o = IDX.porCodigo[cc]; if (o && cc !== '000001' && esp.indexOf(o) < 0 && ap.gerais.indexOf(o) >= 0) esp.push(o); });
     var integral = IDX.porCodigo['000001'];
+    // candidatos automaticos: anexo da LC 214 (NCM/NBS) ou correlacao oficial NBS -> cClassTrib
+    var cand = esp.filter(function (x) { return !CONDICIONAL.test(x.d) && !x.dif && x.gIBSCBS; });
+    if (sug && sug.c.indexOf('000001') >= 0) cand = cand.filter(function (x) { return ap.especificas.indexOf(x) >= 0; }); // NBS com tributacao integral prevista
+    cand.sort(function (a, b) { return reducaoMedia(b) - reducaoMedia(a); });
+    var escolhida = cand[0] || integral;
     var outras = ap.gerais.filter(function (x) { return x.c !== '000001' && esp.indexOf(x) < 0; });
-    var opt = function (x) { return '<option value="' + x.c + '">' + x.cst + ' / ' + x.c + ' — ' + esc(x.d.length > 110 ? x.d.slice(0, 107) + '…' : x.d) + rotRed(x) + '</option>'; };
-    var h = '<optgroup label="Regra geral">' + opt(integral) + '</optgroup>';
-    if (esp.length) h += '<optgroup label="Tratamentos específicos aplicáveis a este código">' + esp.map(opt).join('') + '</optgroup>';
-    h += '<optgroup label="Outras situações (confirme o enquadramento)">' + outras.map(opt).join('') + '</optgroup>';
-    $('#n-class').innerHTML = h;
-    var hint = '';
-    if (esp.length) hint = 'Atenção: este código consta de ' + esp.length + ' tratamento(s) específico(s) da LC 214/2025 (' + esp.map(function (x) { return x.c + rotRed(x); }).join('; ') + '). Selecione se a operação se enquadra nas condições legais.';
-    else hint = 'Nenhum benefício específico vinculado a este código nas tabelas oficiais: aplica-se a tributação integral, salvo situação especial.';
-    if (sug && sug.lc.length) hint += ' Item(ns) da LC 116 correlacionado(s): ' + sug.lc.join(', ') + '.';
-    $('#n-class-hint').textContent = hint;
-    $('#n-is-f').hidden = !(tipo === 'ncm' && R.sujeitoIS(IDX, c));
+    var motivo;
+    if (escolhida === integral) motivo = esp.length ? 'Os tratamentos vinculados a este código dependem de condições específicas (ex.: venda a órgão público, diferimento). Aplicada a tributação integral — altere se a operação se enquadrar.' : 'Nenhuma redução ou isenção vinculada a este código nas tabelas oficiais da Receita.';
+    else if (ap.especificas.indexOf(escolhida) >= 0) motivo = 'O código consta do anexo da LC 214/2025 vinculado a esta classificação nas tabelas oficiais da Receita.';
+    else motivo = 'Classificação indicada pela correlação oficial NBS × LC 116 × cClassTrib da NFS-e.';
+    return { integral: integral, especificas: esp, outras: outras, escolhida: escolhida, motivo: motivo, lc: sug ? sug.lc : [] };
   }
+  function rotuloTratamento(x) {
+    if (!x.gIBSCBS) return { t: 'Sem incidência de CBS/IBS', cls: 'g' };
+    if (x.dif) return { t: 'Diferimento', cls: '' };
+    var m = reducaoMedia(x);
+    if (m >= 100) return { t: 'Alíquota zero — redução de 100%', cls: 'g' };
+    if (m > 0) { var r = x.red; return { t: Number(r.cbs) === Number(r.ibsUf) ? 'Redução de ' + numBR(r.cbs) + '%' : 'Redução CBS ' + numBR(r.cbs) + '% · IBS ' + numBR(r.ibsUf) + '%', cls: 'g' }; }
+    return { t: 'Tributação integral', cls: 'n' };
+  }
+  var enqAtual = null;
+  function mostrarEnquadramento(enq) {
+    var x = IDX.porCodigo[$('#n-class').value] || enq.escolhida, rt = rotuloTratamento(x);
+    var manual = x !== enq.escolhida;
+    $('#n-enq').innerHTML = '<div class="box ' + (rt.cls === 'g' ? 'ok' : 'plain') + '" style="margin:10px 0 0"><h2><span class="ic">' + (rt.cls === 'g' ? '✅' : 'ℹ️') + '</span>Enquadramento ' + (manual ? 'selecionado' : 'identificado') + ': ' + esc(rt.t) + '</h2>' +
+      '<p><span class="tag ' + (rt.cls === 'g' ? 'g' : 'n') + '">CST ' + x.cst + ' · cClassTrib ' + x.c + '</span> ' + esc(x.d) + '</p>' +
+      '<p style="font-size:12.5px;color:var(--ink3)">' + esc(manual ? 'Classificação alterada manualmente.' : enq.motivo) + '</p></div>';
+    $('#n-enq').hidden = false;
+    enqAtual = enq;
+  }
+
   function rotRed(x) {
     if (!x.gIBSCBS) return ' [sem destaque de CBS/IBS]';
     if (x.dif) return ' [diferimento]';
@@ -450,6 +508,7 @@
     inp.addEventListener('input', function () {
       limparCodigo();
       clearTimeout(timer);
+      if (!folhasNcm && inp.value.trim().length >= 2) { box.innerHTML = '<button type="button" disabled>Carregando tabelas de NCM/NBS…</button>'; box.hidden = false; }
       timer = setTimeout(function () {
         carregaNomenclaturas().then(function () {
           var tipo = $('#n-tipo').value, q = inp.value, dig = q.replace(/[.\-\s]/g, '');
@@ -472,6 +531,10 @@
     $('#n-regime').addEventListener('change', function () { toggleNota(); $('#n-res').hidden = true; });
     $('#f-nota').addEventListener('reset', function () { setTimeout(function () { limparCodigo(); toggleNota(); $('#n-res').hidden = true; $('#n-msg').textContent = ''; }, 0); });
     $('#f-nota').addEventListener('submit', calcularNota);
+    $('#n-class').addEventListener('change', function () {
+      if (enqAtual) mostrarEnquadramento(enqAtual);
+      if (!$('#n-res').hidden) calcularNota({ preventDefault: function () { } });
+    });
   }
   function rotuloCurto(tipo, c) {
     var p = caminho(tipo, c); var folha = p.length ? p[p.length - 1][1] : '';
@@ -480,7 +543,7 @@
     return t.length > 150 ? t.slice(0, 147) + '…' : t;
   }
 
-  function lerValor(id) { var el = $(id); var r = parseNum(el.value); el.setAttribute('aria-invalid', String(!r.ok)); if (!r.ok) throw el; return r.v; }
+  function lerValor(id) { var el = $(id); var r = parseNum(el.value, ehPct(el)); el.setAttribute('aria-invalid', String(!r.ok)); if (!r.ok) throw el; return r.v; }
 
   function calcularNota(ev) {
     ev.preventDefault();
@@ -569,7 +632,7 @@
       ev.preventDefault();
       var m = $('#pr-msg'), ids = { cbs: '#pr-cbs', ibsUf: '#pr-uf', ibsMun: '#pr-mun' }, p = {};
       for (var k in ids) {
-        var r = parseNum($(ids[k]).value);
+        var r = parseNum($(ids[k]).value, true);
         if (!r.ok || r.vazio || Number(r.v) < 0 || Number(r.v) > 100) { m.style.color = 'var(--red)'; m.textContent = 'Alíquota inválida.'; $(ids[k]).focus(); return; }
         p[k] = Number(r.v);
       }
@@ -584,6 +647,7 @@
 
   // ================================================================== inicializacao
   function init() {
+    document.addEventListener('focusout', function (ev) { var el = ev.target; if (el && el.matches && el.matches('input.num')) formatarCampo(el); });
     $$('.tab').forEach(function (t) { t.addEventListener('click', function () { abrir(t.id.slice(2)); }); });
     window.addEventListener('hashchange', function () { abrir(tabDoHash(), false); });
     fetch('data/rtc.json').then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {

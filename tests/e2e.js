@@ -35,6 +35,18 @@ const assert = (c, m) => { if (!c) throw new Error('FALHOU: ' + m); console.log(
   assert(txt.includes('Comparativo com 2026'), 'LP: comparativo PIS/Cofins exibido');
   await page.screenshot({ path: SHOTS + '/1-simulador-lp.png', fullPage: true });
 
+  // formatos de numero: "100.000", "2.000", "18.000" (ponto de milhar sem virgula) e "50000"
+  await page.fill('#s-bruto', '100.000'); await page.fill('#s-desc', '2.000'); await page.fill('#s-icms', '18.000'); await page.fill('#s-cr', '50000');
+  await page.click('#f-sim button[type=submit]');
+  txt = nt(await page.textContent('#s-res'));
+  assert(txt.includes('R$ 80.000,00') && txt.includes('R$ 3.390,00'), 'números "100.000", "2.000", "18.000" e "50000" lidos corretamente (base R$ 80.000,00)');
+  assert(nt(await page.inputValue('#s-desc')) === '2.000,00', 'campo reformatado ao sair: "2.000" -> "2.000,00"');
+  for (const [entrada, esperado] of [['1.234.567,89', '1.234.567,89'], ['1234567.89', '1.234.567,89'], ['1,234,567.89', '1.234.567,89'], ['2000', '2.000,00'], ['2000,5', '2.000,50'], ['R$ 750', '750,00']]) {
+    await page.fill('#s-bruto', entrada); await page.focus('#s-desc');
+    assert(nt(await page.inputValue('#s-bruto')) === esperado, 'formato "' + entrada + '" interpretado como ' + esperado);
+  }
+  await page.fill('#s-bruto', '100.000,00'); await page.fill('#s-desc', '2.000,00'); await page.fill('#s-icms', '18.000,00'); await page.fill('#s-cr', '50.000,00');
+
   // composição com redução de 60%
   await page.fill('#s-c-integral', '50'); await page.fill('#s-c-red60', '50');
   await page.click('#f-sim button[type=submit]');
@@ -100,10 +112,15 @@ const assert = (c, m) => { if (!c) throw new Error('FALHOU: ' + m); console.log(
   assert((nt(await page.textContent('#n-sugg'))).includes('1006.30.21'), 'nota: busca por descrição encontra 1006.30.21');
   await page.fill('#n-cod', '10063021');
   await page.waitForFunction(() => document.querySelector('#n-class').options.length > 3);
-  const opts = await page.$$eval('#n-class option', o => o.map(x => x.value));
-  assert(opts.includes('200003'), 'nota: NCM 10063021 lista 200003 (cesta básica, redução 100%)');
-  await page.fill('#n-vprod', '1.000,00'); await page.fill('#n-vicms', '70,00');
+  assert(await page.inputValue('#n-class') === '200003', 'nota: NCM 10063021 enquadrado automaticamente em 200003 (cesta básica)');
+  assert(nt(await page.textContent('#n-enq')).includes('redução de 100%'), 'nota: quadro "Enquadramento identificado: Alíquota zero — redução de 100%"');
+  await page.fill('#n-vprod', '1.000'); await page.fill('#n-vicms', '70');
+  await page.click('#f-nota button[type=submit]');
+  await page.waitForSelector('#n-res:not([hidden])');
+  assert(nt(await page.textContent('#n-res tr.tot td.v')) === 'R$ 0,00', 'nota arroz automático: CBS + IBS = R$ 0,00 sem escolher nada');
   await page.selectOption('#n-class', '000001');
+  await page.waitForFunction(() => document.querySelector('#n-enq').textContent.includes('selecionado'));
+  assert(nt(await page.textContent('#n-res tr.tot td.v')) === 'R$ 106,01', 'nota: trocar para 000001 recalcula sozinho (R$ 106,01)');
   await page.click('#f-nota button[type=submit]');
   await page.waitForSelector('#n-res:not([hidden])');
   txt = nt(await page.textContent('#n-res'));
@@ -113,7 +130,6 @@ const assert = (c, m) => { if (!c) throw new Error('FALHOU: ' + m); console.log(
   const brl = v => 'R$ ' + Number(RTC.toStr(v, 2)).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   assert(txt.includes(brl(ref.vCBS)) && txt.includes(brl(ref.total)), 'nota NF-e integral: CBS ' + brl(ref.vCBS) + ' total ' + brl(ref.total));
   await page.selectOption('#n-class', '200003');
-  await page.click('#f-nota button[type=submit]');
   txt = nt(await page.textContent('#n-res'));
   assert(nt(await page.textContent('#n-res tr.tot td.v')) === 'R$ 0,00', 'nota cesta básica (200003): total de CBS + IBS = R$ 0,00');
   await page.screenshot({ path: SHOTS + '/4-nota-ncm.png', fullPage: true });
@@ -124,14 +140,24 @@ const assert = (c, m) => { if (!c) throw new Error('FALHOU: ' + m); console.log(
   await page.waitForSelector('#n-sugg:not([hidden]) button[data-c]');
   assert((await page.$$('#n-sugg button[data-c]')).length > 0, 'nota: busca por item da LC 116 (17.19) retorna NBS');
   await page.fill('#n-cod', '122011200');
-  await page.waitForFunction(() => [...document.querySelectorAll('#n-class option')].some(o => o.value === '200028'));
-  await page.selectOption('#n-class', '200028');
+  await page.waitForFunction(() => document.querySelector('#n-class').value === '200028');
+  assert(nt(await page.textContent('#n-enq')).includes('Redução de 60%'), 'nota: NBS pré-escola enquadrada automaticamente em 200028 (redução de 60%)');
   await page.fill('#n-vserv', '1.200,00');
   await page.click('#f-nota button[type=submit]');
   txt = nt(await page.textContent('#n-res'));
   // Receita (doc): base 1200, red 60% -> CBS 11.3*0.4=4.52% -> 54,24 ; IBS 0.02% -> 0,24 + 0,24
   assert(txt.includes('R$ 54,24') && txt.includes('R$ 0,24'), 'nota NFS-e educação (200028): CBS R$ 54,24 / IBS UF R$ 0,24');
   await page.screenshot({ path: SHOTS + '/5-nota-nbs.png', fullPage: true });
+
+  // contabilidade (17.19) -> 200052 automatico
+  await page.fill('#n-cod', '113022100');
+  await page.waitForFunction(() => document.querySelector('#n-class').value === '200052');
+  await page.fill('#n-vserv', '3.000'); await page.fill('#n-siss', '150');
+  await page.click('#f-nota button[type=submit]');
+  assert(nt(await page.textContent('#n-res tr.tot td.v')) === 'R$ 227,44', 'nota: contabilidade enquadrada em 200052 (30%) -> total R$ 227,44');
+  await page.fill('#n-cod', '122011200');
+  await page.waitForFunction(() => document.querySelector('#n-class').value === '200028');
+  await page.fill('#n-vserv', '1.200,00'); await page.fill('#n-siss', '');
 
   // Emitente do Simples
   await page.selectOption('#n-regime', 'SN');
@@ -141,6 +167,12 @@ const assert = (c, m) => { if (!c) throw new Error('FALHOU: ' + m); console.log(
   txt = nt(await page.textContent('#n-res'));
   // III faixa 1: pCBS 0.9258 -> 1200*0.9258% = 11,1096 -> NFS-e 2 casas: 0.93% -> 11,16 ; pIBS 0.01 -> 0,12
   assert(txt.includes('R$ 11,16') && txt.includes('R$ 0,12'), 'nota Simples NFS-e: CBS R$ 11,16 / IBS R$ 0,12 (alíquotas com 2 casas)');
+
+  // NCM sem beneficio permanece integral
+  await page.selectOption('#n-regime', 'LP'); await page.selectOption('#n-tipo', 'ncm');
+  await page.fill('#n-cod', '84713012');
+  await page.waitForFunction(() => document.querySelector('#n-class').options.length > 3);
+  assert(await page.inputValue('#n-class') === '000001' && nt(await page.textContent('#n-enq')).includes('Tributação integral'), 'nota: notebook 84713012 fica em tributação integral (000001)');
 
   // NCM sujeito ao IS (cerveja)
   await page.selectOption('#n-regime', 'LR');

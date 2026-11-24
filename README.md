@@ -20,8 +20,13 @@ Site estático (HTML/CSS/JS, sem servidor) para simular a **CBS** e o **IBS** de
    recálculo instantâneo, totais da carteira, exportação do resultado em CSV e impressão/PDF.
    Os dados ficam somente no navegador (localStorage).
 3. **Simulador de nota fiscal** — valor da nota, NCM (NF-e) ou NBS (NFS-e) com busca por código,
-   descrição ou item da LC 116; lista as classificações tributárias (CST/cClassTrib) aplicáveis ao
-   código pelas tabelas oficiais e calcula CBS, IBS estadual e IBS municipal.
+   descrição ou item da LC 116. O enquadramento é **automático**: o site identifica, pelas tabelas
+   oficiais (anexos da LC 214/2025 e correlação NBS × cClassTrib), se o código tem redução de 100%,
+   60%, 40%, 30% etc. e já calcula a CBS, o IBS estadual e o IBS municipal com essa redução.
+   Benefícios que dependem de condição do comprador (ex.: venda a órgão público) não são aplicados
+   sozinhos, mas ficam listados para seleção.
+
+Campos numéricos aceitam qualquer formato: 2000, 2.000, 2.000,00, 2000,5 ou 1,234.56.
 
 Premissas padrão (editáveis na aba *Premissas*): **CBS 11,3%**, **IBS 0,05% estadual + 0,05% municipal**.
 

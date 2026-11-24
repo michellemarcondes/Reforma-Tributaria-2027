@@ -72,8 +72,8 @@
       <div class="grid g3">
         <div class="field"><label class="req" for="s-anexo">Anexo / atividade</label><select id="s-anexo" name="anexo"></select></div>
         <div class="field"><label for="s-rbt12">Receita bruta dos últimos 12 meses — RBT12 (R$)</label><input id="s-rbt12" name="rbt12" class="num" inputmode="decimal" placeholder="Se vazio: faturamento × 12"></div>
-        <div class="field"><label for="s-pcbs">pCBSSN do PGDAS (%) — opcional</label><input id="s-pcbs" name="pCBSSN" class="num" inputmode="decimal" placeholder="calculado"><span class="hint">Se você já tem a alíquota efetiva de CBS do PGDAS, informe-a.</span></div>
-        <div class="field"><label for="s-pibs">pIBSSN do PGDAS (%) — opcional</label><input id="s-pibs" name="pIBSSN" class="num" inputmode="decimal" placeholder="calculado"></div>
+        <div class="field"><label for="s-pcbs">pCBSSN do PGDAS (%) — opcional</label><input id="s-pcbs" data-pct name="pCBSSN" class="num" inputmode="decimal" placeholder="calculado"><span class="hint">Se você já tem a alíquota efetiva de CBS do PGDAS, informe-a.</span></div>
+        <div class="field"><label for="s-pibs">pIBSSN do PGDAS (%) — opcional</label><input id="s-pibs" data-pct name="pIBSSN" class="num" inputmode="decimal" placeholder="calculado"></div>
       </div>
     </div>
 
@@ -84,7 +84,7 @@
       <div class="grid g3">
         <div class="field"><label for="s-cr">Compras de fornecedores do regime regular (R$)</label><input id="s-cr" name="comprasRegular" class="num" inputmode="decimal" placeholder="0,00"><span class="hint">Mercadorias, insumos, energia, aluguel e serviços de PJ — valor sem ICMS/ISS.</span></div>
         <div class="field"><label for="s-cs">Compras de optantes do Simples Nacional (R$)</label><input id="s-cs" name="comprasSimples" class="num" inputmode="decimal" placeholder="0,00"></div>
-        <div class="field"><label for="s-csa">CBS + IBS destacada nas notas do Simples (%)</label><input id="s-csa" name="aliqCreditoSimples" class="num" inputmode="decimal" placeholder="ex.: 1,20"><span class="hint">O crédito é limitado ao valor destacado (em geral entre 0,6% e 4%).</span></div>
+        <div class="field"><label for="s-csa">CBS + IBS destacada nas notas do Simples (%)</label><input id="s-csa" data-pct name="aliqCreditoSimples" class="num" inputmode="decimal" placeholder="ex.: 1,20"><span class="hint">O crédito é limitado ao valor destacado (em geral entre 0,6% e 4%).</span></div>
       </div>
     </div>
 
@@ -144,8 +144,8 @@
     <div class="grid only-sn-n" hidden style="margin-top:12px">
       <div class="field"><label class="req" for="n-anexo">Anexo do Simples</label><select id="n-anexo"></select></div>
       <div class="field"><label for="n-rbt12">RBT12 (R$)</label><input id="n-rbt12" class="num" inputmode="decimal" placeholder="Receita bruta 12 meses"></div>
-      <div class="field"><label for="n-pcbs">pCBSSN do PGDAS (%)</label><input id="n-pcbs" class="num" inputmode="decimal" placeholder="calculado"></div>
-      <div class="field"><label for="n-pibs">pIBSSN do PGDAS (%)</label><input id="n-pibs" class="num" inputmode="decimal" placeholder="calculado"></div>
+      <div class="field"><label for="n-pcbs">pCBSSN do PGDAS (%)</label><input id="n-pcbs" data-pct class="num" inputmode="decimal" placeholder="calculado"></div>
+      <div class="field"><label for="n-pibs">pIBSSN do PGDAS (%)</label><input id="n-pibs" data-pct class="num" inputmode="decimal" placeholder="calculado"></div>
     </div>
 
     <div class="grid" style="margin-top:12px">
@@ -155,9 +155,10 @@
         <span class="hint" id="n-cod-hint">Use os 8 dígitos do NCM. Pode buscar pela descrição.</span>
         <div class="path" id="n-path"></div>
       </div>
-      <div class="field wide only-reg-n"><label for="n-class">Classificação tributária (CST / cClassTrib)</label>
+      <div class="field wide only-reg-n"><label for="n-class">Classificação tributária (CST / cClassTrib) — preenchida automaticamente</label>
         <select id="n-class"><option value="">Informe o NCM/NBS para listar as classificações aplicáveis</option></select>
-        <span class="hint" id="n-class-hint"></span></div>
+        <span class="hint" id="n-class-hint"></span>
+        <div id="n-enq" hidden></div></div>
     </div>
 
     <h3 class="sub">Valores da nota</h3>
@@ -187,9 +188,9 @@
   <form id="f-prem" class="card" novalidate>
     <div class="card-h"><span class="sig">Alíquotas nominais</span><span class="nome">Aplicadas nas três funcionalidades; ficam salvas neste navegador</span></div>
     <div class="grid g3">
-      <div class="field"><label for="pr-cbs">CBS (%)</label><input id="pr-cbs" class="num" inputmode="decimal"></div>
-      <div class="field"><label for="pr-uf">IBS estadual (%)</label><input id="pr-uf" class="num" inputmode="decimal"></div>
-      <div class="field"><label for="pr-mun">IBS municipal (%)</label><input id="pr-mun" class="num" inputmode="decimal"></div>
+      <div class="field"><label for="pr-cbs">CBS (%)</label><input id="pr-cbs" data-pct class="num" inputmode="decimal"></div>
+      <div class="field"><label for="pr-uf">IBS estadual (%)</label><input id="pr-uf" data-pct class="num" inputmode="decimal"></div>
+      <div class="field"><label for="pr-mun">IBS municipal (%)</label><input id="pr-mun" data-pct class="num" inputmode="decimal"></div>
     </div>
     <div class="btns"><button class="btn" type="submit">Salvar premissas</button><button class="btn sec" type="button" id="pr-reset">Restaurar padrão (CBS 11,3% · IBS 0,05% + 0,05%)</button><span class="msg" id="pr-msg" role="status"></span></div>
   </form>
